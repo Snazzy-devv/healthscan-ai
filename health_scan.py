@@ -11,17 +11,18 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # ----------------------
-# Load environment variables from .env (local) and override existing ones
+# Load environment variables
 # ----------------------
 load_dotenv(override=True)
 
 # ----------------------
-# Explicitly set environment variable for OpenRouter
+# Ensure OPENROUTER_API_KEY is set
 # ----------------------
-if os.getenv("OPENROUTER_API_KEY"):
-    os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
-else:
-    st.warning("⚠️ OPENROUTER_API_KEY not found in environment. Please set it in .env or Streamlit Secrets.")
+openrouter_key = os.getenv("OPENROUTER_API_KEY")
+if not openrouter_key:
+    st.error("❌ OPENROUTER_API_KEY not set! Add it to .env or Streamlit Secrets.")
+    st.stop()
+os.environ["OPENROUTER_API_KEY"] = openrouter_key
 
 # ----------------------
 # Streamlit Page Config
@@ -29,10 +30,26 @@ else:
 st.set_page_config(page_title="HealthScan AI", page_icon="💊", layout="centered")
 
 # ----------------------
-# Text Extraction Function
+# Initialize OCR reader in session state
+# ----------------------
+if 'ocr_reader' not in st.session_state:
+    st.session_state.ocr_reader = easyocr.Reader(['en'])
+
+# Initialize LLM in session state
+if 'llm' not in st.session_state:
+    st.session_state.llm = ChatOpenAI(
+        model="gpt-4o",
+        api_key=openrouter_key,
+        base_url="https://openrouter.ai/api/v1"
+    )
+
+# ----------------------
+# Helper Functions
 # ----------------------
 def extract_text(uploaded_file):
+    """Extract text from PDF or image."""
     text = ""
+
     if "pdf" in uploaded_file.type:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
@@ -41,18 +58,14 @@ def extract_text(uploaded_file):
         image = Image.open(uploaded_file)
         try:
             img_np = np.array(image)
-            # instantiate a fresh OCR reader for each upload
-            ocr_reader = easyocr.Reader(['en'])
-            results = ocr_reader.readtext(img_np, detail=0)
+            results = st.session_state.ocr_reader.readtext(img_np, detail=0)
             text = " ".join(results)
         finally:
-            image.close()  # free memory
+            image.close()
     return text
 
-# ----------------------
-# DOCX Creation Function
-# ----------------------
 def create_docx(markdown_content):
+    """Convert Markdown to Word DOCX."""
     doc = Document()
     doc.add_heading('Medical Lab Analysis Report', 0)
 
@@ -72,12 +85,13 @@ def create_docx(markdown_content):
     return buffer
 
 # ----------------------
-# UI
+# Streamlit UI
 # ----------------------
 st.title("🩺 HealthScan AI")
 st.subheader("Instant Lab Result Analysis & Document Converter")
 st.markdown("---")
 
+# File uploader
 uploaded_file = st.file_uploader(
     "Upload a photo or PDF of your lab results",
     type=["pdf", "png", "jpg", "jpeg"],
@@ -85,33 +99,20 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
+    # Clear previous session data
+    for key in ['raw_text', 'report_md']:
+        if key in st.session_state:
+            del st.session_state[key]
+
     with st.status("Analyzing your document...", expanded=True) as status:
-
         st.write("📄 Reading text from file...")
-        raw_text = extract_text(uploaded_file)
+        st.session_state.raw_text = extract_text(uploaded_file)
 
-        if not raw_text.strip():
+        if not st.session_state.raw_text.strip():
             st.error("❌ Could not extract text from the file.")
             st.stop()
 
         st.write("🤖 Consulting AI Medical Knowledge Base...")
-
-        # ----------------------
-        # Fetch OpenRouter API key from environment
-        # ----------------------
-        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
-        if not openrouter_key:
-            st.error("❌ OPENROUTER_API_KEY not set! Add it to .env or Streamlit Secrets.")
-            st.stop()
-
-        # ----------------------
-        # Initialize LLM
-        # ----------------------
-        llm = ChatOpenAI(
-            model="gpt-4o",
-            api_key=openrouter_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
 
         system_prompt = SystemMessage(content="""
 You are a Medical Analyst. You receive raw text from lab scans.
@@ -129,28 +130,26 @@ Structure:
 DISCLAIMER: This is not a clinical diagnosis.
         """)
 
-        user_prompt = HumanMessage(content=f"Analyze this content:\n\n{raw_text}")
+        user_prompt = HumanMessage(content=f"Analyze this content:\n\n{st.session_state.raw_text}")
 
         try:
-            response = llm.invoke([system_prompt, user_prompt])
-            report_md = response.content
+            response = st.session_state.llm.invoke([system_prompt, user_prompt])
+            st.session_state.report_md = response.content
         except Exception as e:
             st.error(f"❌ AI Error: {e}")
             st.stop()
 
         status.update(label="✅ Analysis Complete!", state="complete", expanded=False)
 
-    # ----------------------
-    # Display & Download
-    # ----------------------
-    st.markdown(report_md)
+    # Display AI report
+    st.markdown(st.session_state.report_md)
     st.markdown("---")
     st.subheader("📥 Download Your Report")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        docx_data = create_docx(report_md)
+        docx_data = create_docx(st.session_state.report_md)
         st.download_button(
             label="Download as Word (.docx)",
             data=docx_data,
@@ -162,7 +161,7 @@ DISCLAIMER: This is not a clinical diagnosis.
     with col2:
         st.download_button(
             label="Download as Markdown (.md)",
-            data=report_md,
+            data=st.session_state.report_md,
             file_name="Medical_Analysis.md",
             mime="text/markdown"
         )
