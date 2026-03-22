@@ -1,8 +1,10 @@
 streamlit
-easyocr
 pymupdf
-langchain-openai
-python-docx
+easyocr
 numpy
-Pillow
+pillow
+python-docx
+langchain
+langchain-openai
+openai
 python-dotenv
