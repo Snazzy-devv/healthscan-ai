@@ -1,5 +1,5 @@
 streamlit
-pymupdf
+pymupdf==1.23.7
 easyocr
 numpy
 pillow
@@ -8,3 +8,5 @@ langchain
 langchain-openai
 openai
 python-dotenv
+torch
+torchvision
