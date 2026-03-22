@@ -1,39 +1,38 @@
 import streamlit as st
-import pdfplumber  
+import pdfplumber  # stable PDF reading
 import easyocr
 import numpy as np
 import io
-import os
 from PIL import Image
 from docx import Document
-from dotenv import load_dotenv
+import os
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-# Load environment variables
-load_dotenv()
-
-# Streamlit page config
+# ----------------------
+# Streamlit Page Config
+# ----------------------
 st.set_page_config(page_title="HealthScan AI", page_icon="💊", layout="centered")
 
-# --- LOAD OCR MODEL ---
+# ----------------------
+# OCR Initialization
+# ----------------------
 @st.cache_resource
 def load_ocr():
     return easyocr.Reader(['en'])
 
 reader = load_ocr()
 
-# --- TEXT EXTRACTION FUNCTION ---
+# ----------------------
+# Text Extraction
+# ----------------------
 def extract_text(uploaded_file):
     text = ""
 
-    # Handle PDF
     if "pdf" in uploaded_file.type:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
                 text += page.extract_text() or ""
-
-    # Handle Images
     else:
         image = Image.open(uploaded_file)
         img_np = np.array(image)
@@ -42,8 +41,9 @@ def extract_text(uploaded_file):
 
     return text
 
-
-# --- DOCX CREATION FUNCTION ---
+# ----------------------
+# DOCX Creation
+# ----------------------
 def create_docx(markdown_content):
     doc = Document()
     doc.add_heading('Medical Lab Analysis Report', 0)
@@ -63,8 +63,9 @@ def create_docx(markdown_content):
     buffer.seek(0)
     return buffer
 
-
-# --- UI ---
+# ----------------------
+# UI
+# ----------------------
 st.title("🩺 HealthScan AI")
 st.subheader("Instant Lab Result Analysis & Document Converter")
 st.markdown("---")
@@ -86,10 +87,12 @@ if uploaded_file:
 
         st.write("🤖 Consulting AI Medical Knowledge Base...")
 
-        # Initialize LLM
+        # ----------------------
+        # LLM Initialization
+        # ----------------------
         llm = ChatOpenAI(
             model="gpt-4o",
-            api_key=os.getenv("OPENAI_API_KEY")  # ✅ Use Streamlit secrets
+            api_key=os.environ.get("OPENAI_API_KEY")  # ✅ Must be set in Streamlit Secrets
         )
 
         system_prompt = SystemMessage(content="""
@@ -108,9 +111,7 @@ Structure:
 DISCLAIMER: This is not a clinical diagnosis.
         """)
 
-        user_prompt = HumanMessage(
-            content=f"Analyze this content:\n\n{raw_text}"
-        )
+        user_prompt = HumanMessage(content=f"Analyze this content:\n\n{raw_text}")
 
         try:
             response = llm.invoke([system_prompt, user_prompt])
@@ -121,10 +122,10 @@ DISCLAIMER: This is not a clinical diagnosis.
 
         status.update(label="✅ Analysis Complete!", state="complete", expanded=False)
 
-    # --- DISPLAY RESULT ---
+    # ----------------------
+    # Display & Download
+    # ----------------------
     st.markdown(report_md)
-
-    # --- DOWNLOAD OPTIONS ---
     st.markdown("---")
     st.subheader("📥 Download Your Report")
 
