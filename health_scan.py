@@ -8,7 +8,7 @@ from PIL import Image
 from docx import Document
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 # Load environment variables
 load_dotenv()
