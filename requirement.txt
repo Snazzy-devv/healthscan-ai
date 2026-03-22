@@ -1,0 +1,8 @@
+streamlit
+easyocr
+pymupdf
+langchain-openai
+python-docx
+numpy
+Pillow
+python-dotenv
