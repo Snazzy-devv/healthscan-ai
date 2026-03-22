@@ -1,37 +1,39 @@
 import streamlit as st
-import pymupdf as fitz  
+import pdfplumber  
 import easyocr
 import numpy as np
 import io
 import os
 from PIL import Image
 from docx import Document
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 
 # Load environment variables
 load_dotenv()
 
-# Streamlit config
+# Streamlit page config
 st.set_page_config(page_title="HealthScan AI", page_icon="💊", layout="centered")
 
-# Initialize OCR
+# --- LOAD OCR MODEL ---
 @st.cache_resource
 def load_ocr():
     return easyocr.Reader(['en'])
 
 reader = load_ocr()
 
-# --- TEXT EXTRACTION ---
+# --- TEXT EXTRACTION FUNCTION ---
 def extract_text(uploaded_file):
-    file_type = uploaded_file.type
     text = ""
 
-    if "pdf" in file_type:
-        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        for page in doc:
-            text += page.get_text()
+    # Handle PDF
+    if "pdf" in uploaded_file.type:
+        with pdfplumber.open(uploaded_file) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ""
+
+    # Handle Images
     else:
         image = Image.open(uploaded_file)
         img_np = np.array(image)
@@ -41,7 +43,7 @@ def extract_text(uploaded_file):
     return text
 
 
-# --- DOCX CREATION ---
+# --- DOCX CREATION FUNCTION ---
 def create_docx(markdown_content):
     doc = Document()
     doc.add_heading('Medical Lab Analysis Report', 0)
@@ -74,15 +76,20 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
     with st.status("Analyzing your document...", expanded=True) as status:
-        st.write("Reading text from file...")
+
+        st.write("📄 Reading text from file...")
         raw_text = extract_text(uploaded_file)
 
-        st.write("Consulting AI Medical Knowledge Base...")
+        if not raw_text.strip():
+            st.error("❌ Could not extract text from the file.")
+            st.stop()
 
-        # ✅ FIXED: Proper API usage
+        st.write("🤖 Consulting AI Medical Knowledge Base...")
+
+        # Initialize LLM
         llm = ChatOpenAI(
             model="gpt-4o",
-            api_key=os.getenv("OPENAI_API_KEY")  # Use Streamlit secrets
+            api_key=os.getenv("OPENAI_API_KEY")  # ✅ Use Streamlit secrets
         )
 
         system_prompt = SystemMessage(content="""
@@ -105,14 +112,19 @@ DISCLAIMER: This is not a clinical diagnosis.
             content=f"Analyze this content:\n\n{raw_text}"
         )
 
-        response = llm.invoke([system_prompt, user_prompt])
-        report_md = response.content
+        try:
+            response = llm.invoke([system_prompt, user_prompt])
+            report_md = response.content
+        except Exception as e:
+            st.error(f"❌ AI Error: {e}")
+            st.stop()
 
-        status.update(label="Analysis Complete!", state="complete", expanded=False)
+        status.update(label="✅ Analysis Complete!", state="complete", expanded=False)
 
+    # --- DISPLAY RESULT ---
     st.markdown(report_md)
 
-    # Downloads
+    # --- DOWNLOAD OPTIONS ---
     st.markdown("---")
     st.subheader("📥 Download Your Report")
 
@@ -136,4 +148,4 @@ DISCLAIMER: This is not a clinical diagnosis.
         )
 
 else:
-    st.info("Please upload a file to begin.")
+    st.info("📤 Please upload a file to begin.")
