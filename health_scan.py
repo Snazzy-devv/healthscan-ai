@@ -1,13 +1,27 @@
 import streamlit as st
-import pdfplumber  # stable PDF reading
+import pdfplumber
 import easyocr
 import numpy as np
 import io
 from PIL import Image
 from docx import Document
 import os
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+
+# ----------------------
+# Load environment variables from .env (local) and override existing ones
+# ----------------------
+load_dotenv(override=True)
+
+# ----------------------
+# Explicitly set environment variable for OpenRouter
+# ----------------------
+if os.getenv("OPENROUTER_API_KEY"):
+    os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
+else:
+    st.warning("⚠️ OPENROUTER_API_KEY not found in environment. Please set it in .env or Streamlit Secrets.")
 
 # ----------------------
 # Streamlit Page Config
@@ -24,16 +38,18 @@ def load_ocr():
 reader = load_ocr()
 
 # ----------------------
-# Text Extraction
+# Text Extraction Function
 # ----------------------
 def extract_text(uploaded_file):
     text = ""
 
+    # PDF handling
     if "pdf" in uploaded_file.type:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
                 text += page.extract_text() or ""
     else:
+        # Image handling
         image = Image.open(uploaded_file)
         img_np = np.array(image)
         results = reader.readtext(img_np, detail=0)
@@ -42,7 +58,7 @@ def extract_text(uploaded_file):
     return text
 
 # ----------------------
-# DOCX Creation
+# DOCX Creation Function
 # ----------------------
 def create_docx(markdown_content):
     doc = Document()
@@ -88,13 +104,23 @@ if uploaded_file:
         st.write("🤖 Consulting AI Medical Knowledge Base...")
 
         # ----------------------
-        # LLM Initialization
+        # Fetch OpenRouter API key from environment
+        # ----------------------
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        if not openrouter_key:
+            st.error("❌ OPENROUTER_API_KEY not set! Add it to .env or Streamlit Secrets.")
+            st.stop()
+
+        # ----------------------
+        # Initialize LLM
         # ----------------------
         llm = ChatOpenAI(
             model="gpt-4o",
-            api_key=os.environ.get("OPENAI_API_KEY")  # ✅ Must be set in Streamlit Secrets
+            api_key=openrouter_key,
+            base_url="https://openrouter.ai/api/v1"
         )
 
+        # System and user prompts
         system_prompt = SystemMessage(content="""
 You are a Medical Analyst. You receive raw text from lab scans.
 Analyze the biomarkers and generate a report in Markdown.
