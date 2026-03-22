@@ -29,32 +29,24 @@ else:
 st.set_page_config(page_title="HealthScan AI", page_icon="💊", layout="centered")
 
 # ----------------------
-# OCR Initialization
-# ----------------------
-@st.cache_resource
-def load_ocr():
-    return easyocr.Reader(['en'])
-
-reader = load_ocr()
-
-# ----------------------
 # Text Extraction Function
 # ----------------------
 def extract_text(uploaded_file):
     text = ""
-
-    # PDF handling
     if "pdf" in uploaded_file.type:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
                 text += page.extract_text() or ""
     else:
-        # Image handling
         image = Image.open(uploaded_file)
-        img_np = np.array(image)
-        results = reader.readtext(img_np, detail=0)
-        text = " ".join(results)
-
+        try:
+            img_np = np.array(image)
+            # instantiate a fresh OCR reader for each upload
+            ocr_reader = easyocr.Reader(['en'])
+            results = ocr_reader.readtext(img_np, detail=0)
+            text = " ".join(results)
+        finally:
+            image.close()  # free memory
     return text
 
 # ----------------------
@@ -88,7 +80,8 @@ st.markdown("---")
 
 uploaded_file = st.file_uploader(
     "Upload a photo or PDF of your lab results",
-    type=["pdf", "png", "jpg", "jpeg"]
+    type=["pdf", "png", "jpg", "jpeg"],
+    help="Max 10MB recommended"
 )
 
 if uploaded_file:
@@ -120,7 +113,6 @@ if uploaded_file:
             base_url="https://openrouter.ai/api/v1"
         )
 
-        # System and user prompts
         system_prompt = SystemMessage(content="""
 You are a Medical Analyst. You receive raw text from lab scans.
 Analyze the biomarkers and generate a report in Markdown.
@@ -165,6 +157,7 @@ DISCLAIMER: This is not a clinical diagnosis.
             file_name="Medical_Analysis.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+        docx_data.close()  # free memory
 
     with col2:
         st.download_button(
