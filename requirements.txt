@@ -1,8 +1,12 @@
 streamlit
+pdfplumber
 easyocr
-pymupdf
-langchain-openai
-python-docx
 numpy
-Pillow
+pillow
+python-docx
+langchain
+langchain-openai
+openai
 python-dotenv
+torch
+torchvision
