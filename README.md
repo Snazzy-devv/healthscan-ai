@@ -41,6 +41,8 @@ streamlit run app.py
  * Prompt Engineering: The extracted text is sent to the LLM with a specialized medical instruction set.
  * Formatting: The AI returns a Markdown-formatted analysis.
  * Export: The user can download the final report as a styled .docx file for their records.
+
+
 ⚠️ Disclaimer
 > IMPORTANT: This application is for educational and informational purposes only. It does not provide medical diagnoses, treatments, or prescriptions. Always consult with a licensed healthcare professional before making any medical decisions based on the output of this software.
 > 
